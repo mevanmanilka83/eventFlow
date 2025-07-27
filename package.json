@@ -1,0 +1,15 @@
+{
+  "name": "nodejs-express-rest-api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --watch app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "author": "Mevan Manilka",
+  "license": "ISC",
+  "description": ""
+}
