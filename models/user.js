@@ -1,5 +1,6 @@
 // User model with standalone functions using SQLite database
 import { db } from '../config/database.js';
+import bcrypt from 'bcryptjs';
 
 // Email validation function
 const isValidEmail = (email) => {
@@ -49,7 +50,7 @@ const validateInput = (field, value, fieldName) => {
 };
 
 // Create a new user
-export const createUser = (userData) => {
+export const createUser = async (userData) => {
   const { username, email, password } = userData;
   
   // Validate required fields
@@ -95,6 +96,10 @@ export const createUser = (userData) => {
     throw new Error('Password must be less than 128 characters long');
   }
   
+  // Hash the password
+  const saltRounds = 12;
+  const hashedPassword = await bcrypt.hash(trimmedPassword, saltRounds);
+  
   try {
     // Insert new user into database
     const insertUser = db.prepare(`
@@ -102,7 +107,7 @@ export const createUser = (userData) => {
       VALUES (?, ?, ?)
     `);
     
-    const result = insertUser.run(trimmedUsername, trimmedEmail, trimmedPassword);
+    const result = insertUser.run(trimmedUsername, trimmedEmail, hashedPassword);
     
     // Get the created user
     const newUser = findUserById(result.lastInsertRowid);
@@ -157,7 +162,7 @@ export const getAllUsers = () => {
 };
 
 // Validate user credentials
-export const validateUserCredentials = (email, password) => {
+export const validateUserCredentials = async (email, password) => {
   // Validate email format
   if (!isValidEmail(email)) {
     return null;
@@ -168,13 +173,64 @@ export const validateUserCredentials = (email, password) => {
     return null;
   }
   
-  if (user.password !== password) {
+  // Compare password with hashed password
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
     return null;
   }
   
   // Return user without password
   const { password: _, ...userWithoutPassword } = user;
   return userWithoutPassword;
+};
+
+// Verify user credentials (alternative function with more detailed response)
+export const verifyUserCredentials = async (email, password) => {
+  try {
+    // Validate email format
+    if (!isValidEmail(email)) {
+      return {
+        isValid: false,
+        user: null,
+        error: 'Invalid email format'
+      };
+    }
+    
+    const user = findUserByEmail(email);
+    if (!user) {
+      return {
+        isValid: false,
+        user: null,
+        error: 'User not found'
+      };
+    }
+    
+    // Compare password with hashed password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return {
+        isValid: false,
+        user: null,
+        error: 'Invalid password'
+      };
+    }
+    
+    // Return user without password
+    const { password: _, ...userWithoutPassword } = user;
+    
+    return {
+      isValid: true,
+      user: userWithoutPassword,
+      error: null
+    };
+    
+  } catch (error) {
+    return {
+      isValid: false,
+      user: null,
+      error: 'Verification failed'
+    };
+  }
 };
 
 // Update user

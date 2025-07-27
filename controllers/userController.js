@@ -1,7 +1,8 @@
 // Import individual functions from user model
 import { 
   createUser, 
-  validateUserCredentials, 
+  validateUserCredentials,
+  verifyUserCredentials,
   getAllUsers as getAllUsersFromDB, 
   findUserById,
   updateUser,
@@ -9,7 +10,7 @@ import {
 } from '../models/user.js';
 
 // User signup controller
-export const signup = (req, res) => {
+export const signup = async (req, res) => {
   try {
     const { username, email, password } = req.body;
     
@@ -22,7 +23,7 @@ export const signup = (req, res) => {
     }
     
     // Create new user using standalone function
-    const newUser = createUser({ username, email, password });
+    const newUser = await createUser({ username, email, password });
     
     res.status(201).json({
       success: true,
@@ -49,7 +50,7 @@ export const signup = (req, res) => {
 };
 
 // User login controller
-export const login = (req, res) => {
+export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     
@@ -62,7 +63,7 @@ export const login = (req, res) => {
     }
     
     // Validate user credentials using standalone function
-    const user = validateUserCredentials(email, password);
+    const user = await validateUserCredentials(email, password);
     
     if (!user) {
       return res.status(401).json({
@@ -75,6 +76,43 @@ export const login = (req, res) => {
       success: true,
       message: 'Login successful',
       data: user
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// Alternative login controller using verifyUserCredentials
+export const loginWithVerification = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+    
+    // Verify user credentials using the new function
+    const result = await verifyUserCredentials(email, password);
+    
+    if (!result.isValid) {
+      return res.status(401).json({
+        success: false,
+        message: result.error
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      data: result.user
     });
     
   } catch (error) {
