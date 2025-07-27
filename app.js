@@ -1,6 +1,11 @@
 import express from 'express';
+import { initializeDatabase } from './config/database.js';
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize database
+initializeDatabase();
 
 // Middleware
 app.use(express.json());
@@ -20,7 +25,9 @@ app.get('/', (req, res) => {
       'POST /users/signup': 'Register a new user',
       'POST /users/login': 'Login user',
       'GET /users': 'Get all users',
-      'GET /users/:id': 'Get user by ID'
+      'GET /users/:id': 'Get user by ID',
+      'PUT /users/:id': 'Update user by ID',
+      'DELETE /users/:id': 'Delete user by ID'
     }
   });
 });
