@@ -6,14 +6,19 @@ import {
   getAllUsers as getAllUsersFromDB, 
   findUserById,
   updateUser,
-  deleteUser
+  deleteUser,
+  updateUserRole,
+  toggleUserStatus,
+  getAllRoles,
+  getRoleById,
+  getUserWithRole
 } from '../models/user.js';
 import { generateToken } from '../middleware/auth.js';
 
 // User signup controller
 export const signup = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, role_id } = req.body;
     
     // Validate required fields
     if (!username || !email || !password) {
@@ -24,7 +29,7 @@ export const signup = async (req, res) => {
     }
     
     // Create new user using standalone function
-    const newUser = await createUser({ username, email, password });
+    const newUser = await createUser({ username, email, password, role_id });
     
     // Generate JWT token for the new user
     const token = generateToken(newUser);
@@ -179,7 +184,7 @@ export const loginWithToken = async (req, res) => {
   }
 };
 
-// Get all users
+// Get all users (admin only)
 export const getAllUsers = (req, res) => {
   try {
     const users = getAllUsersFromDB();
@@ -202,7 +207,7 @@ export const getAllUsers = (req, res) => {
 export const getUserById = (req, res) => {
   try {
     const { id } = req.params;
-    const user = findUserById(id);
+    const user = getUserWithRole(id);
     
     if (!user) {
       return res.status(404).json({
@@ -232,7 +237,7 @@ export const getUserById = (req, res) => {
 export const updateUserById = (req, res) => {
   try {
     const { id } = req.params;
-    const { username, email } = req.body;
+    const { username, email, role_id } = req.body;
     
     // Validate required fields
     if (!username || !email) {
@@ -243,7 +248,7 @@ export const updateUserById = (req, res) => {
     }
     
     // Update user
-    const updatedUser = updateUser(id, { username, email });
+    const updatedUser = updateUser(id, { username, email, role_id });
     
     // Remove password from response
     const { password, ...userWithoutPassword } = updatedUser;
@@ -272,6 +277,76 @@ export const updateUserById = (req, res) => {
   }
 };
 
+// Update user role (admin only)
+export const updateUserRoleById = (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role_id } = req.body;
+    
+    if (!role_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Role ID is required'
+      });
+    }
+    
+    const updatedUser = updateUserRole(id, role_id);
+    
+    // Remove password from response
+    const { password, ...userWithoutPassword } = updatedUser;
+    
+    res.status(200).json({
+      success: true,
+      message: 'User role updated successfully',
+      data: userWithoutPassword
+    });
+    
+  } catch (error) {
+    let statusCode = 400;
+    
+    if (error.message === 'User not found') {
+      statusCode = 404;
+    } else if (error.message.includes('Invalid role')) {
+      statusCode = 400;
+    }
+    
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Toggle user status (admin only)
+export const toggleUserStatusById = (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedUser = toggleUserStatus(id);
+    
+    // Remove password from response
+    const { password, ...userWithoutPassword } = updatedUser;
+    
+    res.status(200).json({
+      success: true,
+      message: `User ${updatedUser.is_active ? 'activated' : 'deactivated'} successfully`,
+      data: userWithoutPassword
+    });
+    
+  } catch (error) {
+    if (error.message === 'User not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 // Delete user
 export const deleteUserById = (req, res) => {
   try {
@@ -293,6 +368,52 @@ export const deleteUserById = (req, res) => {
       });
     }
     
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// Get all roles
+export const getAllRolesController = (req, res) => {
+  try {
+    const roles = getAllRoles();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Roles retrieved successfully',
+      data: roles
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// Get role by ID
+export const getRoleByIdController = (req, res) => {
+  try {
+    const { id } = req.params;
+    const role = getRoleById(id);
+    
+    if (!role) {
+      return res.status(404).json({
+        success: false,
+        message: 'Role not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'Role retrieved successfully',
+      data: role
+    });
+    
+  } catch (error) {
     res.status(500).json({
       success: false,
       message: 'Internal server error'

@@ -1,13 +1,6 @@
 import express from 'express';
-import { 
-  createNewEvent,
-  getAllEventsController,
-  getEventByIdController,
-  getMyEvents,
-  updateEventById,
-  deleteEventById
-} from '../controllers/eventController.js';
-import { requireAuth } from '../middleware/auth.js';
+import { events } from '../controllers/eventController.js';
+import { requireAuth, requireModerator, requirePermission } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -54,13 +47,23 @@ const validateEventFields = (req, res, next) => {
 };
 
 // Public routes (no authentication required)
-router.get('/', getAllEventsController); // Get all events
-router.get('/:id', getEventByIdController); // Get event by ID
+router.get('/', events.getAllEventsController); // Get all events (filtered by role)
+router.get('/search', events.searchEventsController); // Search events
+router.get('/upcoming', events.getUpcomingEventsController); // Get upcoming events
+router.get('/date-range', events.getEventsByDateRangeController); // Get events by date range
 
 // Protected routes (authentication required)
-router.post('/', requireAuth, validateEventFields, createNewEvent); // Create new event
-router.get('/my/events', requireAuth, getMyEvents); // Get user's own events
-router.put('/:id', requireAuth, validateEventFields, updateEventById); // Update event
-router.delete('/:id', requireAuth, deleteEventById); // Delete event
+router.post('/', requireAuth, validateEventFields, events.createNewEvent); // Create new event
+router.get('/my/events', requireAuth, events.getMyEvents); // Get user's own events
+
+// Moderator/Admin routes (require moderator or admin role)
+router.get('/pending/all', requireAuth, requireModerator, events.getPendingEventsController); // Get pending events
+
+// Event-specific routes (must come after specific routes)
+router.get('/:id', events.getEventByIdController); // Get event by ID
+router.put('/:id', requireAuth, validateEventFields, events.updateEventById); // Update event
+router.delete('/:id', requireAuth, events.deleteEventById); // Delete event
+router.put('/:id/approve', requireAuth, requireModerator, events.approveEventById); // Approve event
+router.put('/:id/reject', requireAuth, requireModerator, events.rejectEventById); // Reject event
 
 export default router; 

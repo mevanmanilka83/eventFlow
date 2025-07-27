@@ -1,4 +1,4 @@
-import { verifyUserCredentials } from '../models/user.js';
+import { verifyUserCredentials, hasPermission, hasAnyPermission, getUserWithRole } from '../models/user.js';
 import jwt from 'jsonwebtoken';
 
 // JWT secret key (in production, use environment variable)
@@ -10,7 +10,9 @@ export const generateToken = (user) => {
   const payload = {
     id: user.id,
     email: user.email,
-    username: user.username
+    username: user.username,
+    role_id: user.role_id,
+    role_name: user.role_name
   };
   
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -136,14 +138,131 @@ export const requireAuth = async (req, res, next) => {
       });
     }
     
+    // Get fresh user data with role information
+    const userWithRole = getUserWithRole(result.user.id);
+    if (!userWithRole || !userWithRole.is_active) {
+      return res.status(401).json({
+        success: false,
+        message: 'User account is deactivated or not found'
+      });
+    }
+    
     // Add user info to request
-    req.user = result.user;
+    req.user = userWithRole;
     next();
     
   } catch (error) {
     res.status(401).json({
       success: false,
       message: 'Authentication required'
+    });
+  }
+};
+
+// Middleware to check if user has specific permission
+export const requirePermission = (permission) => {
+  return (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+      }
+      
+      if (!hasPermission(req.user.id, permission)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions'
+        });
+      }
+      
+      next();
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Permission check failed'
+      });
+    }
+  };
+};
+
+// Middleware to check if user has any of the specified permissions
+export const requireAnyPermission = (permissions) => {
+  return (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+      }
+      
+      if (!hasAnyPermission(req.user.id, permissions)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions'
+        });
+      }
+      
+      next();
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Permission check failed'
+      });
+    }
+  };
+};
+
+// Middleware to check if user is admin
+export const requireAdmin = (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+    
+    if (req.user.role_name !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+    
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Admin check failed'
+    });
+  }
+};
+
+// Middleware to check if user is moderator or admin
+export const requireModerator = (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+    
+    if (!['admin', 'moderator'].includes(req.user.role_name)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Moderator or admin access required'
+      });
+    }
+    
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Moderator check failed'
     });
   }
 };

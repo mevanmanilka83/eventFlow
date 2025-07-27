@@ -6,11 +6,17 @@ import {
   editEvent,
   deleteEvent,
   getEventsByOrganizer,
-  isEventOwner
+  isEventOwner,
+  approveEvent,
+  rejectEvent,
+  getPendingEvents,
+  searchEvents,
+  getUpcomingEvents,
+  getEventsByDateRange
 } from '../modules/events.js';
 
 // Create a new event
-export const createNewEvent = async (req, res) => {
+const createNewEvent = async (req, res) => {
   try {
     const { title, description, date, address } = req.body;
     const organizer_id = req.user.id; // Get from authenticated user
@@ -34,7 +40,7 @@ export const createNewEvent = async (req, res) => {
     
     res.status(201).json({
       success: true,
-      message: 'Event created successfully',
+      message: 'Event created successfully and pending approval',
       data: newEvent
     });
     
@@ -56,9 +62,10 @@ export const createNewEvent = async (req, res) => {
 };
 
 // Get all events
-export const getAllEventsController = async (req, res) => {
+const getAllEventsController = async (req, res) => {
   try {
-    const events = getAllEvents();
+    const userId = req.user ? req.user.id : null;
+    const events = getAllEvents(userId);
     
     res.status(200).json({
       success: true,
@@ -75,10 +82,11 @@ export const getAllEventsController = async (req, res) => {
 };
 
 // Get event by ID
-export const getEventByIdController = async (req, res) => {
+const getEventByIdController = async (req, res) => {
   try {
     const { id } = req.params;
-    const event = getEventById(id);
+    const userId = req.user ? req.user.id : null;
+    const event = getEventById(id, userId);
     
     if (!event) {
       return res.status(404).json({
@@ -102,10 +110,10 @@ export const getEventByIdController = async (req, res) => {
 };
 
 // Get events by current user (organizer)
-export const getMyEvents = async (req, res) => {
+const getMyEvents = async (req, res) => {
   try {
     const organizer_id = req.user.id;
-    const events = getEventsByOrganizer(organizer_id);
+    const events = getEventsByOrganizer(organizer_id, organizer_id);
     
     res.status(200).json({
       success: true,
@@ -122,22 +130,14 @@ export const getMyEvents = async (req, res) => {
 };
 
 // Update event
-export const updateEventById = async (req, res) => {
+const updateEventById = async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, date, address } = req.body;
-    const organizer_id = req.user.id;
-    
-    // Check if event exists and belongs to the user
-    if (!isEventOwner(id, organizer_id)) {
-      return res.status(403).json({
-        success: false,
-        message: 'You can only update your own events'
-      });
-    }
+    const userId = req.user.id;
     
     // Update event
-    const updatedEvent = editEvent(id, { title, description, date, address });
+    const updatedEvent = editEvent(id, { title, description, date, address }, userId);
     
     res.status(200).json({
       success: true,
@@ -151,6 +151,8 @@ export const updateEventById = async (req, res) => {
     // Set appropriate status codes for different error types
     if (error.message === 'Event not found') {
       statusCode = 404;
+    } else if (error.message.includes('You can only edit your own events')) {
+      statusCode = 403;
     }
     
     res.status(statusCode).json({
@@ -161,21 +163,13 @@ export const updateEventById = async (req, res) => {
 };
 
 // Delete event
-export const deleteEventById = async (req, res) => {
+const deleteEventById = async (req, res) => {
   try {
     const { id } = req.params;
-    const organizer_id = req.user.id;
-    
-    // Check if event exists and belongs to the user
-    if (!isEventOwner(id, organizer_id)) {
-      return res.status(403).json({
-        success: false,
-        message: 'You can only delete your own events'
-      });
-    }
+    const userId = req.user.id;
     
     // Delete event
-    deleteEvent(id);
+    deleteEvent(id, userId);
     
     res.status(200).json({
       success: true,
@@ -188,6 +182,11 @@ export const deleteEventById = async (req, res) => {
         success: false,
         message: error.message
       });
+    } else if (error.message.includes('You can only delete your own events')) {
+      return res.status(403).json({
+        success: false,
+        message: error.message
+      });
     }
     
     res.status(500).json({
@@ -195,4 +194,189 @@ export const deleteEventById = async (req, res) => {
       message: 'Internal server error'
     });
   }
+};
+
+// Approve event (moderator/admin only)
+const approveEventById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const approverId = req.user.id;
+    
+    const approvedEvent = approveEvent(id, approverId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Event approved successfully',
+      data: approvedEvent
+    });
+    
+  } catch (error) {
+    let statusCode = 400;
+    
+    if (error.message === 'Event not found') {
+      statusCode = 404;
+    } else if (error.message.includes('Insufficient permissions')) {
+      statusCode = 403;
+    } else if (error.message.includes('already approved')) {
+      statusCode = 409;
+    }
+    
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Reject event (moderator/admin only)
+const rejectEventById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rejectorId = req.user.id;
+    
+    const rejectedEvent = rejectEvent(id, rejectorId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Event rejected successfully',
+      data: rejectedEvent
+    });
+    
+  } catch (error) {
+    let statusCode = 400;
+    
+    if (error.message === 'Event not found') {
+      statusCode = 404;
+    } else if (error.message.includes('Insufficient permissions')) {
+      statusCode = 403;
+    } else if (error.message.includes('already not approved')) {
+      statusCode = 409;
+    }
+    
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Get pending events (moderator/admin only)
+const getPendingEventsController = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const events = getPendingEvents(userId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Pending events retrieved successfully',
+      data: events
+    });
+    
+  } catch (error) {
+    if (error.message.includes('Insufficient permissions')) {
+      return res.status(403).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// Search events
+const searchEventsController = async (req, res) => {
+  try {
+    const { q } = req.query;
+    const userId = req.user ? req.user.id : null;
+    
+    if (!q) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+    
+    const events = searchEvents(q, userId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Search completed successfully',
+      data: events
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// Get upcoming events
+const getUpcomingEventsController = async (req, res) => {
+  try {
+    const userId = req.user ? req.user.id : null;
+    const events = getUpcomingEvents(userId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Upcoming events retrieved successfully',
+      data: events
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// Get events by date range
+const getEventsByDateRangeController = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const userId = req.user ? req.user.id : null;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Start date and end date are required'
+      });
+    }
+    
+    const events = getEventsByDateRange(startDate, endDate, userId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Events retrieved successfully',
+      data: events
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// Export all controller functions as a single events object
+export const events = {
+  createNewEvent,
+  getAllEventsController,
+  getEventByIdController,
+  getMyEvents,
+  updateEventById,
+  deleteEventById,
+  approveEventById,
+  rejectEventById,
+  getPendingEventsController,
+  searchEventsController,
+  getUpcomingEventsController,
+  getEventsByDateRangeController
 }; 

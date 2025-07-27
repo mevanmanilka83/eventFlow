@@ -1,5 +1,6 @@
-// Events Module - Complete CRUD operations
+// Events Module - Complete CRUD operations with role-based authorization
 import { db } from '../config/database.js';
+import { hasPermission, hasAnyPermission } from '../models/user.js';
 
 // Validate input fields
 const validateInput = (field, value, fieldName) => {
@@ -95,9 +96,20 @@ export const createEvent = async (eventData) => {
     
     const result = insertEvent.run(trimmedTitle, trimmedDescription, date, trimmedAddress, organizer_id);
     
-    // Get the created event
-    const newEvent = getEventById(result.lastInsertRowid);
-    return newEvent;
+    // Return the created event data directly
+    return {
+      id: result.lastInsertRowid,
+      title: trimmedTitle,
+      description: trimmedDescription,
+      date: date,
+      address: trimmedAddress,
+      organizer_id: organizer_id,
+      is_approved: 0,
+      approved_by: null,
+      approved_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
     
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
@@ -107,32 +119,73 @@ export const createEvent = async (eventData) => {
   }
 };
 
-// Get all events
-export const getAllEvents = () => {
-  const getEvents = db.prepare(`
-    SELECT e.*, u.username as organizer_name, u.email as organizer_email
-    FROM events e
-    LEFT JOIN users u ON e.organizer_id = u.id
-    ORDER BY e.date ASC
-  `);
+// Get all events (with role-based filtering)
+export const getAllEvents = (userId = null) => {
+  let query, params;
   
-  return getEvents.all();
+  if (userId && hasAnyPermission(userId, ['read_all_events', 'approve_events'])) {
+    // Admin/moderator can see all events
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      ORDER BY e.date ASC
+    `;
+    params = [];
+  } else {
+    // Regular users can only see approved events
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.is_approved = 1
+      ORDER BY e.date ASC
+    `;
+    params = [];
+  }
+  
+  const getEvents = db.prepare(query);
+  return getEvents.all(...params);
 };
 
-// Get event by ID
-export const getEventById = (id) => {
-  const getEvent = db.prepare(`
-    SELECT e.*, u.username as organizer_name, u.email as organizer_email
-    FROM events e
-    LEFT JOIN users u ON e.organizer_id = u.id
-    WHERE e.id = ?
-  `);
+// Get event by ID (with role-based access)
+export const getEventById = (id, userId = null) => {
+  let query, params;
   
-  return getEvent.get(id);
+  if (userId && hasAnyPermission(userId, ['read_all_events', 'approve_events'])) {
+    // Admin/moderator can see any event
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.id = ?
+    `;
+    params = [id];
+  } else {
+    // Regular users can only see approved events
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.id = ? AND e.is_approved = 1
+    `;
+    params = [id];
+  }
+  
+  const getEvent = db.prepare(query);
+  return getEvent.get(...params);
 };
 
-// Edit/Update event
-export const editEvent = (id, eventData) => {
+// Edit/Update event (with role-based permissions)
+export const editEvent = (id, eventData, userId) => {
   const { title, description, date, address } = eventData;
   
   // Validate and trim inputs
@@ -179,6 +232,18 @@ export const editEvent = (id, eventData) => {
     throw new Error('Event date must be in the future');
   }
   
+  // Check permissions
+  const event = getEventById(id, userId);
+  if (!event) {
+    throw new Error('Event not found');
+  }
+  
+  // Only event owner, moderator, or admin can edit
+  if (!hasAnyPermission(userId, ['update_any_event', 'approve_events']) && 
+      event.organizer_id !== userId) {
+    throw new Error('You can only edit your own events');
+  }
+  
   try {
     const updateEvent = db.prepare(`
       UPDATE events 
@@ -192,15 +257,27 @@ export const editEvent = (id, eventData) => {
       throw new Error('Event not found');
     }
     
-    return getEventById(id);
+    return getEventById(id, userId);
     
   } catch (error) {
     throw error;
   }
 };
 
-// Delete event
-export const deleteEvent = (id) => {
+// Delete event (with role-based permissions)
+export const deleteEvent = (id, userId) => {
+  // Check permissions
+  const event = getEventById(id, userId);
+  if (!event) {
+    throw new Error('Event not found');
+  }
+  
+  // Only event owner, moderator, or admin can delete
+  if (!hasAnyPermission(userId, ['delete_any_event', 'approve_events']) && 
+      event.organizer_id !== userId) {
+    throw new Error('You can only delete your own events');
+  }
+  
   const deleteEvent = db.prepare(`
     DELETE FROM events WHERE id = ?
   `);
@@ -221,63 +298,223 @@ export const eventExists = (id) => {
 };
 
 // Get events by organizer
-export const getEventsByOrganizer = (organizerId) => {
-  const getEvents = db.prepare(`
-    SELECT e.*, u.username as organizer_name, u.email as organizer_email
-    FROM events e
-    LEFT JOIN users u ON e.organizer_id = u.id
-    WHERE e.organizer_id = ?
-    ORDER BY e.date ASC
-  `);
+export const getEventsByOrganizer = (organizerId, userId = null) => {
+  let query, params;
   
-  return getEvents.all(organizerId);
+  if (userId && hasAnyPermission(userId, ['read_all_events', 'approve_events'])) {
+    // Admin/moderator can see all events by organizer
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.organizer_id = ?
+      ORDER BY e.date ASC
+    `;
+    params = [organizerId];
+  } else {
+    // Regular users can only see approved events by organizer
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.organizer_id = ? AND e.is_approved = 1
+      ORDER BY e.date ASC
+    `;
+    params = [organizerId];
+  }
+  
+  const getEvents = db.prepare(query);
+  return getEvents.all(...params);
 };
 
 // Check if user owns the event
 export const isEventOwner = (eventId, userId) => {
-  const event = getEventById(eventId);
+  const event = getEventById(eventId, userId);
   if (!event) {
     return false;
   }
   return event.organizer_id === userId;
 };
 
-// Search events by title or description
-export const searchEvents = (searchTerm) => {
-  const searchEvents = db.prepare(`
+// Approve event (moderator/admin only)
+export const approveEvent = (eventId, approverId) => {
+  if (!hasAnyPermission(approverId, ['approve_events'])) {
+    throw new Error('Insufficient permissions to approve events');
+  }
+  
+  const event = getEventById(eventId, approverId);
+  if (!event) {
+    throw new Error('Event not found');
+  }
+  
+  if (event.is_approved) {
+    throw new Error('Event is already approved');
+  }
+  
+  const approveEvent = db.prepare(`
+    UPDATE events 
+    SET is_approved = 1, approved_by = ?, approved_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  
+  const result = approveEvent.run(approverId, eventId);
+  
+  if (result.changes === 0) {
+    throw new Error('Event not found');
+  }
+  
+  return getEventById(eventId, approverId);
+};
+
+// Reject event (moderator/admin only)
+export const rejectEvent = (eventId, rejectorId) => {
+  if (!hasAnyPermission(rejectorId, ['approve_events'])) {
+    throw new Error('Insufficient permissions to reject events');
+  }
+  
+  const event = getEventById(eventId, rejectorId);
+  if (!event) {
+    throw new Error('Event not found');
+  }
+  
+  if (!event.is_approved) {
+    throw new Error('Event is already not approved');
+  }
+  
+  const rejectEvent = db.prepare(`
+    UPDATE events 
+    SET is_approved = 0, approved_by = NULL, approved_at = NULL
+    WHERE id = ?
+  `);
+  
+  const result = rejectEvent.run(eventId);
+  
+  if (result.changes === 0) {
+    throw new Error('Event not found');
+  }
+  
+  return getEventById(eventId, rejectorId);
+};
+
+// Get pending events (moderator/admin only)
+export const getPendingEvents = (userId) => {
+  if (!hasAnyPermission(userId, ['approve_events'])) {
+    throw new Error('Insufficient permissions to view pending events');
+  }
+  
+  const getPendingEvents = db.prepare(`
     SELECT e.*, u.username as organizer_name, u.email as organizer_email
     FROM events e
     LEFT JOIN users u ON e.organizer_id = u.id
-    WHERE e.title LIKE ? OR e.description LIKE ?
-    ORDER BY e.date ASC
+    WHERE e.is_approved = 0
+    ORDER BY e.created_at ASC
   `);
   
-  const searchPattern = `%${searchTerm}%`;
-  return searchEvents.all(searchPattern, searchPattern);
+  return getPendingEvents.all();
+};
+
+// Search events by title or description (with role-based filtering)
+export const searchEvents = (searchTerm, userId = null) => {
+  let query, params;
+  
+  if (userId && hasAnyPermission(userId, ['read_all_events', 'approve_events'])) {
+    // Admin/moderator can search all events
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.title LIKE ? OR e.description LIKE ?
+      ORDER BY e.date ASC
+    `;
+    params = [`%${searchTerm}%`, `%${searchTerm}%`];
+  } else {
+    // Regular users can only search approved events
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE (e.title LIKE ? OR e.description LIKE ?) AND e.is_approved = 1
+      ORDER BY e.date ASC
+    `;
+    params = [`%${searchTerm}%`, `%${searchTerm}%`];
+  }
+  
+  const searchEvents = db.prepare(query);
+  return searchEvents.all(...params);
 };
 
 // Get upcoming events (events in the future)
-export const getUpcomingEvents = () => {
-  const getUpcomingEvents = db.prepare(`
-    SELECT e.*, u.username as organizer_name, u.email as organizer_email
-    FROM events e
-    LEFT JOIN users u ON e.organizer_id = u.id
-    WHERE e.date > datetime('now')
-    ORDER BY e.date ASC
-  `);
+export const getUpcomingEvents = (userId = null) => {
+  let query, params;
   
-  return getUpcomingEvents.all();
+  if (userId && hasAnyPermission(userId, ['read_all_events', 'approve_events'])) {
+    // Admin/moderator can see all upcoming events
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.date > datetime('now')
+      ORDER BY e.date ASC
+    `;
+    params = [];
+  } else {
+    // Regular users can only see approved upcoming events
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.date > datetime('now') AND e.is_approved = 1
+      ORDER BY e.date ASC
+    `;
+    params = [];
+  }
+  
+  const getUpcomingEvents = db.prepare(query);
+  return getUpcomingEvents.all(...params);
 };
 
-// Get events by date range
-export const getEventsByDateRange = (startDate, endDate) => {
-  const getEventsByDateRange = db.prepare(`
-    SELECT e.*, u.username as organizer_name, u.email as organizer_email
-    FROM events e
-    LEFT JOIN users u ON e.organizer_id = u.id
-    WHERE e.date BETWEEN ? AND ?
-    ORDER BY e.date ASC
-  `);
+// Get events by date range (with role-based filtering)
+export const getEventsByDateRange = (startDate, endDate, userId = null) => {
+  let query, params;
   
-  return getEventsByDateRange.all(startDate, endDate);
+  if (userId && hasAnyPermission(userId, ['read_all_events', 'approve_events'])) {
+    // Admin/moderator can see all events in date range
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.date BETWEEN ? AND ?
+      ORDER BY e.date ASC
+    `;
+    params = [startDate, endDate];
+  } else {
+    // Regular users can only see approved events in date range
+    query = `
+      SELECT e.*, u.username as organizer_name, u.email as organizer_email,
+             a.username as approver_name
+      FROM events e
+      LEFT JOIN users u ON e.organizer_id = u.id
+      LEFT JOIN users a ON e.approved_by = a.id
+      WHERE e.date BETWEEN ? AND ? AND e.is_approved = 1
+      ORDER BY e.date ASC
+    `;
+    params = [startDate, endDate];
+  }
+  
+  const getEventsByDateRange = db.prepare(query);
+  return getEventsByDateRange.all(...params);
 }; 

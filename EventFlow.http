@@ -1,0 +1,502 @@
+### EventFlow API Testing Suite
+### This file contains practical examples for testing the EventFlow REST API
+
+### ============================================
+### TROUBLESHOOTING: "Admin access required" Error
+### ============================================
+### If you're getting "Admin access required" error, follow these steps:
+
+### Step 1: Create an admin user first
+POST {{baseUrl}}/users/signup
+Content-Type: application/json
+
+{
+  "username": "admin@eventflow.com",
+  "password": "admin123",
+  "email": "admin@eventflow.com",
+  "firstName": "Admin",
+  "lastName": "User",
+  "role": "admin"
+}
+
+### Step 2: Login as admin to get token
+# @name adminLogin
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "username": "admin@eventflow.com",
+  "password": "admin123"
+}
+
+### Step 3: Copy the token from the response and update the variable below
+### Replace the empty adminToken with the actual token from the login response
+### Example: @adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+### ============================================
+### ENVIRONMENT VARIABLES
+### ============================================
+
+@baseUrl = http://localhost:3000
+@adminToken = 
+@moderatorToken = 
+@userToken = 
+@newEventId = 
+
+### ============================================
+### 1. USER AUTHENTICATION & REGISTRATION
+### ============================================
+
+### Register a new admin user
+POST {{baseUrl}}/users/signup
+Content-Type: application/json
+
+{
+  "username": "admin@eventflow.com",
+  "password": "admin123",
+  "email": "admin@eventflow.com",
+  "firstName": "Admin",
+  "lastName": "User",
+  "role": "admin"
+}
+
+### Register a new moderator user
+POST {{baseUrl}}/users/signup
+Content-Type: application/json
+
+{
+  "username": "moderator@eventflow.com",
+  "password": "mod123",
+  "email": "moderator@eventflow.com",
+  "firstName": "Moderator",
+  "lastName": "User",
+  "role": "moderator"
+}
+
+### Register a regular user
+POST {{baseUrl}}/users/signup
+Content-Type: application/json
+
+{
+  "username": "user@eventflow.com",
+  "password": "user123",
+  "email": "user@eventflow.com",
+  "firstName": "Regular",
+  "lastName": "User",
+  "role": "user"
+}
+
+### Login as admin
+# @name adminLogin
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "email": "admin@eventflow.com",
+  "password": "admin123"
+}
+
+### Login as moderator
+# @name moderatorLogin
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "email": "moderator@eventflow.com",
+  "password": "mod123"
+}
+
+### Login as regular user
+# @name userLogin
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "username": "user@eventflow.com",
+  "password": "user123"
+}
+
+### ============================================
+### 2. USER MANAGEMENT (Admin Only)
+### ============================================
+
+### Get all users (requires admin token)
+GET {{baseUrl}}/users
+Authorization: Bearer {{adminToken}}
+
+### Get user by ID
+GET {{baseUrl}}/users/1
+Authorization: Bearer {{adminToken}}
+
+### Update user role (admin only)
+PUT {{baseUrl}}/users/2/role
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "role": "moderator"
+}
+
+### Toggle user status (admin only)
+PUT {{baseUrl}}/users/3/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "status": "inactive"
+}
+
+### Get all roles (admin only)
+GET {{baseUrl}}/users/roles/all
+Authorization: Bearer {{adminToken}}
+
+### Get role by ID
+GET {{baseUrl}}/users/roles/1
+Authorization: Bearer {{adminToken}}
+
+### ============================================
+### 3. USER PROFILE MANAGEMENT
+### ============================================
+
+### Get current user profile
+GET {{baseUrl}}/users/profile
+Authorization: Bearer {{userToken}}
+
+### Update current user profile
+PUT {{baseUrl}}/users/profile
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "firstName": "Updated",
+  "lastName": "Name",
+  "email": "updated@eventflow.com"
+}
+
+### ============================================
+### 4. EVENT MANAGEMENT - PUBLIC ENDPOINTS
+### ============================================
+
+### Get all events (public - no auth required)
+GET {{baseUrl}}/events
+
+### Search events
+GET {{baseUrl}}/events/search?q=conference
+
+### Get upcoming events
+GET {{baseUrl}}/events/upcoming
+
+### Get events by date range
+GET {{baseUrl}}/events/date-range?start=2024-01-01&end=2024-12-31
+
+### Get specific event by ID
+GET {{baseUrl}}/events/1
+
+### ============================================
+### 5. EVENT CREATION & MANAGEMENT (Authenticated)
+### ============================================
+
+### Create a new event (requires authentication)
+POST {{baseUrl}}/events
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "Tech Conference 2024",
+  "description": "Annual technology conference featuring the latest innovations in software development, AI, and cloud computing. Join industry experts for networking and learning opportunities.",
+  "date": "2024-06-15T09:00:00Z",
+  "address": "123 Innovation Drive, Tech City, TC 12345",
+  "category": "Technology",
+  "maxAttendees": 500,
+  "ticketPrice": 299.99
+}
+
+### Create another event
+POST {{baseUrl}}/events
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "Music Festival 2024",
+  "description": "Three-day music festival featuring local and international artists. Food trucks, art installations, and family-friendly activities included.",
+  "date": "2024-07-20T18:00:00Z",
+  "address": "Central Park, Downtown, DP 54321",
+  "category": "Entertainment",
+  "maxAttendees": 2000,
+  "ticketPrice": 89.99
+}
+
+### Get user's own events
+GET {{baseUrl}}/events/my/events
+Authorization: Bearer {{userToken}}
+
+### Update an event
+PUT {{baseUrl}}/events/1
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "Tech Conference 2024 - Updated",
+  "description": "Updated description for the tech conference with new speakers and workshops.",
+  "date": "2024-06-15T09:00:00Z",
+  "address": "123 Innovation Drive, Tech City, TC 12345",
+  "category": "Technology",
+  "maxAttendees": 600,
+  "ticketPrice": 349.99
+}
+
+### Delete an event
+DELETE {{baseUrl}}/events/2
+Authorization: Bearer {{userToken}}
+
+### ============================================
+### 6. EVENT MODERATION (Moderator/Admin Only)
+### ============================================
+
+### Get pending events (moderator/admin only)
+GET {{baseUrl}}/events/pending/all
+Authorization: Bearer {{moderatorToken}}
+
+### Approve an event (moderator/admin only)
+PUT {{baseUrl}}/events/1/approve
+Authorization: Bearer {{moderatorToken}}
+Content-Type: application/json
+
+{
+  "approvalNotes": "Event approved after review. All requirements met."
+}
+
+### Reject an event (moderator/admin only)
+PUT {{baseUrl}}/events/3/reject
+Authorization: Bearer {{moderatorToken}}
+Content-Type: application/json
+
+{
+  "rejectionReason": "Event details incomplete. Please provide more information about venue capacity and safety measures."
+}
+
+### ============================================
+### 7. PRACTICAL TESTING SCENARIOS
+### ============================================
+
+### Scenario 1: Complete Event Lifecycle
+### Step 1: Create an event
+POST {{baseUrl}}/events
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "Startup Networking Meetup",
+  "description": "Monthly networking event for startup founders, investors, and entrepreneurs. Share ideas, find collaborators, and build your network.",
+  "date": "2024-08-10T19:00:00Z",
+  "address": "Innovation Hub, 456 Startup Street, Entrepreneur City, EC 67890",
+  "category": "Business",
+  "maxAttendees": 100,
+  "ticketPrice": 25.00
+}
+
+### Step 2: Check pending events (as moderator)
+GET {{baseUrl}}/events/pending/all
+Authorization: Bearer {{moderatorToken}}
+
+### Step 3: Approve the event
+PUT {{baseUrl}}/events/{{newEventId}}/approve
+Authorization: Bearer {{moderatorToken}}
+Content-Type: application/json
+
+{
+  "approvalNotes": "Great event concept. Approved for public listing."
+}
+
+### Step 4: Verify event is now public
+GET {{baseUrl}}/events/{{newEventId}}
+
+### Scenario 2: User Role Management
+### Step 1: Create a new user
+POST {{baseUrl}}/users/signup
+Content-Type: application/json
+
+{
+  "username": "newuser@eventflow.com",
+  "password": "newuser123",
+  "email": "newuser@eventflow.com",
+  "firstName": "New",
+  "lastName": "User",
+  "role": "user"
+}
+
+### Step 2: Promote user to moderator (admin only)
+PUT {{baseUrl}}/users/4/role
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "role": "moderator"
+}
+
+### Step 3: Verify user list shows updated role
+GET {{baseUrl}}/users
+Authorization: Bearer {{adminToken}}
+
+### Scenario 3: Event Search and Filtering
+### Search for technology events
+GET {{baseUrl}}/events/search?q=tech
+
+### Search for events in specific date range
+GET {{baseUrl}}/events/date-range?start=2024-06-01&end=2024-08-31
+
+### Get upcoming events
+GET {{baseUrl}}/events/upcoming
+
+### ============================================
+### 8. ERROR HANDLING TESTS
+### ============================================
+
+### Test invalid authentication
+GET {{baseUrl}}/users/profile
+Authorization: Bearer invalid_token
+
+### Test missing required fields
+POST {{baseUrl}}/events
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "Incomplete Event",
+  "description": "This event is missing required fields"
+}
+
+### Test unauthorized access
+GET {{baseUrl}}/users
+Authorization: Bearer {{userToken}}
+
+### Test invalid event ID
+GET {{baseUrl}}/events/999999
+
+### ============================================
+### 9. API DOCUMENTATION ENDPOINT
+### ============================================
+
+### Get API documentation and available endpoints
+GET {{baseUrl}}/
+
+### ============================================
+### 10. BATCH OPERATIONS (Advanced Examples)
+### ============================================
+
+### Create multiple events in sequence
+### Event 1
+POST {{baseUrl}}/events
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "Web Development Workshop",
+  "description": "Hands-on workshop covering modern web development techniques including React, Node.js, and database design.",
+  "date": "2024-09-15T10:00:00Z",
+  "address": "Code Academy, 789 Learning Lane, Education City, EC 11111",
+  "category": "Education",
+  "maxAttendees": 50,
+  "ticketPrice": 199.99
+}
+
+### Event 2
+POST {{baseUrl}}/events
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "AI and Machine Learning Summit",
+  "description": "Comprehensive summit on artificial intelligence, machine learning, and their practical applications in business.",
+  "date": "2024-10-20T09:00:00Z",
+  "address": "AI Research Center, 321 Intelligence Ave, Smart City, SC 22222",
+  "category": "Technology",
+  "maxAttendees": 300,
+  "ticketPrice": 499.99
+}
+
+### Event 3
+POST {{baseUrl}}/events
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "Sustainable Business Conference",
+  "description": "Conference focused on sustainable business practices, green technology, and environmental responsibility.",
+  "date": "2024-11-05T08:00:00Z",
+  "address": "Green Convention Center, 555 Eco Street, Green City, GC 33333",
+  "category": "Business",
+  "maxAttendees": 200,
+  "ticketPrice": 299.99
+}
+
+### ============================================
+### 11. PERFORMANCE TESTING
+### ============================================
+
+### Test multiple concurrent requests
+### (Run these in parallel to test server performance)
+
+### Request 1
+GET {{baseUrl}}/events
+
+### Request 2
+GET {{baseUrl}}/events/search?q=conference
+
+### Request 3
+GET {{baseUrl}}/events/upcoming
+
+### Request 4
+GET {{baseUrl}}/events/date-range?start=2024-01-01&end=2024-12-31
+
+### ============================================
+### 12. SECURITY TESTING
+### ============================================
+
+### Test SQL injection attempt
+GET {{baseUrl}}/events/search?q='; DROP TABLE events; --
+
+### Test XSS attempt
+POST {{baseUrl}}/events
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "title": "<script>alert('XSS')</script>",
+  "description": "Event with potential XSS",
+  "date": "2024-12-01T10:00:00Z",
+  "address": "Test Address"
+}
+
+### Test unauthorized role escalation
+POST {{baseUrl}}/users/signup
+Content-Type: application/json
+
+{
+  "username": "hacker@eventflow.com",
+  "password": "hacker123",
+  "email": "hacker@eventflow.com",
+  "firstName": "Hacker",
+  "lastName": "User",
+  "role": "admin"
+}
+
+### ============================================
+### USAGE INSTRUCTIONS
+### ============================================
+
+### 1. Start your Express server: npm start
+### 2. Open this file in VS Code with REST Client extension
+### 3. Set the tokens after login:
+###    - Copy the token from login responses
+###    - Replace the empty token variables at the top
+### 4. Run requests individually or in sequence
+### 5. Use the "Send Request" button above each request
+### 6. View responses in the output panel
+
+### Tips:
+### - Save response tokens to reuse in subsequent requests
+### - Use the "Send Request" button to execute requests
+### - Check the response status and body for each request
+### - Use the environment variables for easy token management
+### - Test different user roles to verify authorization 

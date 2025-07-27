@@ -1,0 +1,37 @@
+### Quick Admin Setup Test
+### Use this file to quickly test admin functionality
+
+@baseUrl = http://localhost:3000
+
+### 1. Test API is running
+GET {{baseUrl}}/
+
+### 2. Create admin user
+POST {{baseUrl}}/users/signup
+Content-Type: application/json
+
+{
+  "username": "admin@eventflow.com",
+  "password": "admin123",
+  "email": "admin@eventflow.com",
+  "firstName": "Admin",
+  "lastName": "User",
+  "role": "admin"
+}
+
+### 3. Login as admin
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "username": "admin@eventflow.com",
+  "password": "admin123"
+}
+
+### 4. Test admin access (replace YOUR_TOKEN_HERE with the token from step 3)
+GET {{baseUrl}}/users
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 5. Test getting all roles (admin only)
+GET {{baseUrl}}/users/roles/all
+Authorization: Bearer YOUR_TOKEN_HERE 
