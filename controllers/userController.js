@@ -26,10 +26,16 @@ export const signup = async (req, res) => {
     // Create new user using standalone function
     const newUser = await createUser({ username, email, password });
     
+    // Generate JWT token for the new user
+    const token = generateToken(newUser);
+    
     res.status(201).json({
       success: true,
       message: 'User created successfully',
-      data: newUser
+      data: {
+        user: newUser,
+        token: token
+      }
     });
     
   } catch (error) {
@@ -73,10 +79,16 @@ export const login = async (req, res) => {
       });
     }
     
+    // Generate JWT token for the user
+    const token = generateToken(user);
+    
     res.status(200).json({
       success: true,
       message: 'Login successful',
-      data: user
+      data: {
+        user: user,
+        token: token
+      }
     });
     
   } catch (error) {

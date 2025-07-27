@@ -11,23 +11,34 @@ initializeDatabase();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Import user routes
+// Import routes
 import userRoutes from './routes/users.js';
+import eventRoutes from './routes/events.js';
 
 // Use routes
 app.use('/users', userRoutes);
+app.use('/events', eventRoutes);
 
 // Basic route for testing
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to the REST API',
     endpoints: {
+      // User endpoints
       'POST /users/signup': 'Register a new user',
       'POST /users/login': 'Login user',
       'GET /users': 'Get all users',
       'GET /users/:id': 'Get user by ID',
       'PUT /users/:id': 'Update user by ID',
-      'DELETE /users/:id': 'Delete user by ID'
+      'DELETE /users/:id': 'Delete user by ID',
+      
+      // Event endpoints
+      'GET /events': 'Get all events',
+      'GET /events/:id': 'Get event by ID',
+      'POST /events': 'Create new event (requires auth)',
+      'GET /events/my/events': 'Get user\'s own events (requires auth)',
+      'PUT /events/:id': 'Update event (requires auth)',
+      'DELETE /events/:id': 'Delete event (requires auth)'
     }
   });
 });

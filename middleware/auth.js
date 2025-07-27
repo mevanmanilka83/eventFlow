@@ -2,7 +2,7 @@ import { verifyUserCredentials } from '../models/user.js';
 import jwt from 'jsonwebtoken';
 
 // JWT secret key (in production, use environment variable)
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'abctoken';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 // Generate JWT token
