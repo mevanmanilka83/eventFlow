@@ -1,4 +1,37 @@
 import { verifyUserCredentials } from '../models/user.js';
+import jwt from 'jsonwebtoken';
+
+// JWT secret key (in production, use environment variable)
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+
+// Generate JWT token
+export const generateToken = (user) => {
+  const payload = {
+    id: user.id,
+    email: user.email,
+    username: user.username
+  };
+  
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+};
+
+// Verify JWT token
+export const verifyToken = (token) => {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return {
+      isValid: true,
+      user: decoded
+    };
+  } catch (error) {
+    return {
+      isValid: false,
+      user: null,
+      error: error.message
+    };
+  }
+};
 
 // Middleware to verify user credentials
 export const verifyCredentials = async (req, res, next) => {
@@ -33,10 +66,47 @@ export const verifyCredentials = async (req, res, next) => {
   }
 };
 
+// Middleware to verify credentials and generate JWT token
+export const loginAndGenerateToken = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+    
+    const result = await verifyUserCredentials(email, password);
+    
+    if (!result.isValid) {
+      return res.status(401).json({
+        success: false,
+        message: result.error
+      });
+    }
+    
+    // Generate JWT token
+    const token = generateToken(result.user);
+    
+    // Add user and token to request object
+    req.user = result.user;
+    req.token = token;
+    next();
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Authentication failed'
+    });
+  }
+};
+
 // Middleware to check if user is authenticated (for protected routes)
 export const requireAuth = async (req, res, next) => {
   try {
-    // Get token from header (you can implement JWT tokens later)
+    // Get token from header
     const authHeader = req.headers.authorization;
     
     if (!authHeader) {
@@ -46,21 +116,28 @@ export const requireAuth = async (req, res, next) => {
       });
     }
     
-    // For now, we'll use a simple approach
-    // In a real app, you'd verify JWT tokens here
+    // Extract token from "Bearer <token>"
     const token = authHeader.replace('Bearer ', '');
     
-    // This is a placeholder - you can implement proper token verification
-    // For now, we'll just check if the token exists
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid token'
+        message: 'Token is required'
       });
     }
     
-    // Add user info to request (you'd decode this from JWT)
-    req.user = { id: token }; // Placeholder
+    // Verify the JWT token
+    const result = verifyToken(token);
+    
+    if (!result.isValid) {
+      return res.status(401).json({
+        success: false,
+        message: result.error || 'Invalid token'
+      });
+    }
+    
+    // Add user info to request
+    req.user = result.user;
     next();
     
   } catch (error) {

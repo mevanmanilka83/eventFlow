@@ -8,6 +8,7 @@ import {
   updateUser,
   deleteUser
 } from '../models/user.js';
+import { generateToken } from '../middleware/auth.js';
 
 // User signup controller
 export const signup = async (req, res) => {
@@ -113,6 +114,49 @@ export const loginWithVerification = async (req, res) => {
       success: true,
       message: 'Login successful',
       data: result.user
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// Login controller that returns JWT token
+export const loginWithToken = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+    
+    // Verify user credentials
+    const result = await verifyUserCredentials(email, password);
+    
+    if (!result.isValid) {
+      return res.status(401).json({
+        success: false,
+        message: result.error
+      });
+    }
+    
+    // Generate JWT token
+    const token = generateToken(result.user);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        user: result.user,
+        token: token
+      }
     });
     
   } catch (error) {
